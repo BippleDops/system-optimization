@@ -1,0 +1,237 @@
+{
+  "text_to_image_workflow": {
+    "name": "Natural Language to Image",
+    "description": "Generate images from text prompts with advanced controls",
+    "nodes": {
+      "1": {
+        "class_type": "CheckpointLoaderSimple",
+        "inputs": {
+          "ckpt_name": "sdxl_base_1.0.safetensors"
+        }
+      },
+      "2": {
+        "class_type": "CLIPTextEncode",
+        "inputs": {
+          "text": "[PROMPT]",
+          "clip": ["1", 1]
+        }
+      },
+      "3": {
+        "class_type": "CLIPTextEncode",
+        "inputs": {
+          "text": "ugly, blurry, low quality, watermark",
+          "clip": ["1", 1]
+        }
+      },
+      "4": {
+        "class_type": "KSampler",
+        "inputs": {
+          "seed": -1,
+          "steps": 30,
+          "cfg": 7.5,
+          "sampler_name": "dpmpp_2m",
+          "scheduler": "karras",
+          "denoise": 1.0,
+          "model": ["1", 0],
+          "positive": ["2", 0],
+          "negative": ["3", 0],
+          "latent_image": ["5", 0]
+        }
+      },
+      "5": {
+        "class_type": "EmptyLatentImage",
+        "inputs": {
+          "width": 1024,
+          "height": 1024,
+          "batch_size": 1
+        }
+      },
+      "6": {
+        "class_type": "VAEDecode",
+        "inputs": {
+          "samples": ["4", 0],
+          "vae": ["1", 2]
+        }
+      },
+      "7": {
+        "class_type": "SaveImage",
+        "inputs": {
+          "filename_prefix": "generated",
+          "images": ["6", 0]
+        }
+      }
+    }
+  },
+  "image_to_video_workflow": {
+    "name": "Image to Video Animation",
+    "description": "Animate still images with motion",
+    "nodes": {
+      "1": {
+        "class_type": "LoadImage",
+        "inputs": {
+          "image": "[INPUT_IMAGE]"
+        }
+      },
+      "2": {
+        "class_type": "AnimateDiff",
+        "inputs": {
+          "model_name": "mm_sd_v15_v2.ckpt",
+          "motion_module": "mm_sd_v15_v2.ckpt",
+          "frame_count": 16,
+          "fps": 8,
+          "image": ["1", 0]
+        }
+      },
+      "3": {
+        "class_type": "VideoWriter",
+        "inputs": {
+          "filename": "animated_output.mp4",
+          "fps": 8,
+          "codec": "libx264",
+          "frames": ["2", 0]
+        }
+      }
+    }
+  },
+  "text_to_video_workflow": {
+    "name": "Text to Video Generation",
+    "description": "Generate videos directly from text descriptions",
+    "nodes": {
+      "1": {
+        "class_type": "CheckpointLoaderSimple",
+        "inputs": {
+          "ckpt_name": "sd_xl_base_1.0.safetensors"
+        }
+      },
+      "2": {
+        "class_type": "CLIPTextEncode",
+        "inputs": {
+          "text": "[VIDEO_PROMPT]",
+          "clip": ["1", 1]
+        }
+      },
+      "3": {
+        "class_type": "BatchPromptSchedule",
+        "inputs": {
+          "text": "[MOTION_PROMPT]",
+          "frame_count": 24,
+          "clip": ["1", 1]
+        }
+      },
+      "4": {
+        "class_type": "KSamplerAdvanced",
+        "inputs": {
+          "add_noise": "enable",
+          "noise_seed": -1,
+          "steps": 20,
+          "cfg": 7.0,
+          "sampler_name": "euler_ancestral",
+          "scheduler": "normal",
+          "start_at_step": 0,
+          "end_at_step": 20,
+          "return_with_leftover_noise": "disable",
+          "model": ["1", 0],
+          "positive": ["3", 0],
+          "negative": ["2", 0],
+          "latent_image": ["5", 0]
+        }
+      },
+      "5": {
+        "class_type": "EmptyLatentImage",
+        "inputs": {
+          "width": 768,
+          "height": 512,
+          "batch_size": 24
+        }
+      },
+      "6": {
+        "class_type": "VAEDecode",
+        "inputs": {
+          "samples": ["4", 0],
+          "vae": ["1", 2]
+        }
+      },
+      "7": {
+        "class_type": "VideoSave",
+        "inputs": {
+          "filename_prefix": "text2video",
+          "fps": 8,
+          "images": ["6", 0]
+        }
+      }
+    }
+  },
+  "style_transfer_workflow": {
+    "name": "AI Style Transfer",
+    "description": "Apply artistic styles to images",
+    "nodes": {
+      "1": {
+        "class_type": "LoadImage",
+        "inputs": {
+          "image": "[CONTENT_IMAGE]"
+        }
+      },
+      "2": {
+        "class_type": "LoadImage",
+        "inputs": {
+          "image": "[STYLE_IMAGE]"
+        }
+      },
+      "3": {
+        "class_type": "StyleTransfer",
+        "inputs": {
+          "content": ["1", 0],
+          "style": ["2", 0],
+          "strength": 0.75
+        }
+      },
+      "4": {
+        "class_type": "SaveImage",
+        "inputs": {
+          "filename_prefix": "styled",
+          "images": ["3", 0]
+        }
+      }
+    }
+  },
+  "upscale_enhance_workflow": {
+    "name": "AI Upscaling and Enhancement",
+    "description": "Upscale and enhance image quality",
+    "nodes": {
+      "1": {
+        "class_type": "LoadImage",
+        "inputs": {
+          "image": "[INPUT_IMAGE]"
+        }
+      },
+      "2": {
+        "class_type": "UpscaleModelLoader",
+        "inputs": {
+          "model_name": "RealESRGAN_x4plus.pth"
+        }
+      },
+      "3": {
+        "class_type": "ImageUpscaleWithModel",
+        "inputs": {
+          "upscale_model": ["2", 0],
+          "image": ["1", 0]
+        }
+      },
+      "4": {
+        "class_type": "FaceDetailer",
+        "inputs": {
+          "image": ["3", 0],
+          "model": "face_yolov8n.pt",
+          "enhancement": "high"
+        }
+      },
+      "5": {
+        "class_type": "SaveImage",
+        "inputs": {
+          "filename_prefix": "upscaled",
+          "images": ["4", 0]
+        }
+      }
+    }
+  }
+}

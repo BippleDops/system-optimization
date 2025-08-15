@@ -1,0 +1,37 @@
+# Optimized ComfyUI model paths configuration
+# Share models with Stable Diffusion WebUI to avoid duplication
+
+stable-diffusion-webui:
+    base_path: /Users/jongosussmango/stable-diffusion-webui/
+    
+    checkpoints: models/Stable-diffusion
+    configs: models/Stable-diffusion
+    vae: models/VAE
+    loras: |
+        models/Lora
+        models/LyCORIS
+    upscale_models: |
+        models/ESRGAN
+        models/RealESRGAN
+        models/SwinIR
+    embeddings: embeddings
+    hypernetworks: models/hypernetworks
+    controlnet: models/ControlNet
+    
+# ComfyUI specific paths
+comfyui:
+    base_path: /Users/jongosussmango/ComfyUI/
+    
+    checkpoints: models/checkpoints
+    configs: models/configs
+    vae: models/vae
+    loras: models/loras
+    upscale_models: models/upscale_models
+    embeddings: models/embeddings
+    controlnet: models/controlnet
+    clip: models/clip
+    clip_vision: models/clip_vision
+    style_models: models/style_models
+    t2i_adapter: models/t2i_adapter
+    animatediff_models: models/animatediff_models
+    animatediff_motion_lora: models/animatediff_motion_lora

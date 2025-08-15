@@ -1,0 +1,57 @@
+{
+  "mcpServers": {
+    "data-analysis": {
+      "command": "python3",
+      "args": ["/Users/jongosussmango/Development/mcp-servers/mcp_data_server.py"],
+      "env": {},
+      "description": "Data analysis and processing server with Pandas integration"
+    },
+    "file-operations": {
+      "command": "python3",
+      "args": ["/Users/jongosussmango/Development/mcp-servers/file_operations_server.py"],
+      "env": {},
+      "description": "File manipulation, search, and processing capabilities"
+    },
+    "code-intelligence": {
+      "command": "python3",
+      "args": ["/Users/jongosussmango/Development/mcp-servers/code_intelligence_server.py"],
+      "env": {},
+      "description": "Code analysis, generation, and project management"
+    }
+  },
+  "tools": {
+    "data_processing": [
+      "pandas",
+      "numpy",
+      "scipy",
+      "scikit-learn",
+      "matplotlib",
+      "seaborn"
+    ],
+    "development": [
+      "pydantic",
+      "anthropic",
+      "fastapi",
+      "uvicorn",
+      "black",
+      "flake8",
+      "mypy",
+      "pytest"
+    ],
+    "ai_tools": [
+      "torch",
+      "transformers",
+      "safetensors",
+      "einops",
+      "accelerate",
+      "diffusers"
+    ],
+    "utilities": [
+      "rich",
+      "click",
+      "typer",
+      "jupyter",
+      "ipython"
+    ]
+  }
+}

@@ -1,0 +1,336 @@
+version: '3.8'
+
+# Complete Power Tools Docker Stack
+# All services configured and ready to run
+
+services:
+  # ============================================
+  # AI & Machine Learning Services
+  # ============================================
+  
+  localai:
+    image: localai/localai:latest
+    container_name: localai
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./models:/models
+      - ./data/localai:/data
+    environment:
+      - MODELS_PATH=/models
+      - THREADS=8
+      - CONTEXT_SIZE=8192
+      - GALLERIES=[{"name":"model-gallery","url":"github:mudler/LocalAI/gallery/index.yaml"}]
+    deploy:
+      resources:
+        limits:
+          memory: 8G
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/readyz"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ============================================
+  # Automation & Workflow Services
+  # ============================================
+  
+  n8n:
+    image: n8nio/n8n:latest
+    container_name: n8n
+    restart: unless-stopped
+    ports:
+      - "5678:5678"
+    volumes:
+      - ./data/n8n:/home/node/.n8n
+      - ./workflows:/workflows
+    environment:
+      - N8N_BASIC_AUTH_ACTIVE=true
+      - N8N_BASIC_AUTH_USER=admin
+      - N8N_BASIC_AUTH_PASSWORD=${N8N_PASSWORD:-changeme}
+      - N8N_HOST=localhost
+      - N8N_PORT=5678
+      - N8N_PROTOCOL=http
+      - NODE_ENV=production
+      - WEBHOOK_URL=http://localhost:5678/
+      - GENERIC_TIMEZONE=America/New_York
+      - N8N_METRICS=true
+    depends_on:
+      - postgres
+      - redis
+
+  windmill:
+    image: ghcr.io/windmill-labs/windmill:main
+    container_name: windmill
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgres://windmill:${WINDMILL_DB_PASSWORD:-windmill}@postgres:5432/windmill
+      - BASE_URL=http://localhost:8000
+      - RUST_LOG=info
+      - NUM_WORKERS=4
+      - WORKER_TAGS=default,heavy
+    depends_on:
+      - postgres
+      - windmill-worker
+
+  windmill-worker:
+    image: ghcr.io/windmill-labs/windmill:main
+    container_name: windmill-worker
+    restart: unless-stopped
+    environment:
+      - DATABASE_URL=postgres://windmill:${WINDMILL_DB_PASSWORD:-windmill}@postgres:5432/windmill
+      - RUST_LOG=info
+      - WORKER_MODE=true
+      - NUM_WORKERS=4
+    depends_on:
+      - postgres
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./data/windmill:/tmp/windmill
+
+  # ============================================
+  # Monitoring & Observability
+  # ============================================
+  
+  changedetection:
+    image: dgtlmoon/changedetection.io:latest
+    container_name: changedetection
+    restart: unless-stopped
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./data/changedetection:/datastore
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - BASE_URL=http://localhost:5000
+      - WEBDRIVER_URL=http://browser-chrome:4444/wd/hub
+    depends_on:
+      - browser-chrome
+
+  browser-chrome:
+    image: selenium/standalone-chrome:latest
+    container_name: browser-chrome
+    restart: unless-stopped
+    shm_size: '2gb'
+    ports:
+      - "4444:4444"
+    environment:
+      - VNC_NO_PASSWORD=1
+      - SCREEN_WIDTH=1920
+      - SCREEN_HEIGHT=1080
+
+  openobserve:
+    image: public.ecr.aws/zinclabs/openobserve:latest
+    container_name: openobserve
+    restart: unless-stopped
+    ports:
+      - "5080:5080"
+      - "5081:5081"  # gRPC port
+    volumes:
+      - ./data/openobserve:/data
+    environment:
+      - ZO_ROOT_USER_EMAIL=${ZO_USER:-admin@example.com}
+      - ZO_ROOT_USER_PASSWORD=${ZO_PASSWORD:-changeme}
+      - ZO_DATA_DIR=/data
+      - ZO_PROMETHEUS_ENABLED=true
+      - ZO_TELEMETRY_ENABLED=false
+
+  # ============================================
+  # Databases & Storage
+  # ============================================
+  
+  postgres:
+    image: postgres:16-alpine
+    container_name: postgres
+    restart: unless-stopped
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init-scripts:/docker-entrypoint-initdb.d
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER:-postgres}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres}
+      - POSTGRES_MULTIPLE_DATABASES=n8n,windmill,automation
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:-redis123}
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  mongodb:
+    image: mongo:7
+    container_name: mongodb
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+      - mongo_config:/data/configdb
+    environment:
+      - MONGO_INITDB_ROOT_USERNAME=${MONGO_USER:-admin}
+      - MONGO_INITDB_ROOT_PASSWORD=${MONGO_PASSWORD:-admin}
+      - MONGO_INITDB_DATABASE=automation
+
+  # ============================================
+  # Development Tools
+  # ============================================
+  
+  code-server:
+    image: codercom/code-server:latest
+    container_name: code-server
+    restart: unless-stopped
+    ports:
+      - "8443:8080"
+    volumes:
+      - ./workspace:/home/coder/workspace
+      - ./config/code-server:/home/coder/.config
+    environment:
+      - PASSWORD=${CODE_SERVER_PASSWORD:-password}
+      - SUDO_PASSWORD=${CODE_SERVER_PASSWORD:-password}
+    user: "1000:1000"
+
+  # ============================================
+  # Self-Hosted Services
+  # ============================================
+  
+  immich-server:
+    image: ghcr.io/immich-app/immich-server:release
+    container_name: immich-server
+    restart: unless-stopped
+    ports:
+      - "2283:3001"
+    volumes:
+      - ./data/immich/upload:/usr/src/app/upload
+    environment:
+      - DB_HOSTNAME=postgres
+      - DB_USERNAME=postgres
+      - DB_PASSWORD=${POSTGRES_PASSWORD:-postgres}
+      - DB_DATABASE_NAME=immich
+      - REDIS_HOSTNAME=redis
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-redis123}
+    depends_on:
+      - postgres
+      - redis
+
+  immich-microservices:
+    image: ghcr.io/immich-app/immich-server:release
+    container_name: immich-microservices
+    restart: unless-stopped
+    command: ['start.sh', 'microservices']
+    volumes:
+      - ./data/immich/upload:/usr/src/app/upload
+    environment:
+      - DB_HOSTNAME=postgres
+      - DB_USERNAME=postgres
+      - DB_PASSWORD=${POSTGRES_PASSWORD:-postgres}
+      - DB_DATABASE_NAME=immich
+      - REDIS_HOSTNAME=redis
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-redis123}
+    depends_on:
+      - postgres
+      - redis
+
+  # ============================================
+  # Utilities & Admin Tools
+  # ============================================
+  
+  portainer:
+    image: portainer/portainer-ce:latest
+    container_name: portainer
+    restart: unless-stopped
+    ports:
+      - "9000:9000"
+      - "9443:9443"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - portainer_data:/data
+    command: -H unix:///var/run/docker.sock
+
+  adminer:
+    image: adminer:latest
+    container_name: adminer
+    restart: unless-stopped
+    ports:
+      - "8090:8080"
+    environment:
+      - ADMINER_DEFAULT_SERVER=postgres
+      - ADMINER_DESIGN=pepa-linha
+    depends_on:
+      - postgres
+      - mongodb
+
+  # ============================================
+  # Networking & Reverse Proxy
+  # ============================================
+  
+  traefik:
+    image: traefik:v3.0
+    container_name: traefik
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "8088:8080"  # Traefik dashboard
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./config/traefik:/etc/traefik
+      - ./data/traefik/acme.json:/acme.json
+    environment:
+      - TRAEFIK_API_DASHBOARD=true
+      - TRAEFIK_PROVIDERS_DOCKER=true
+      - TRAEFIK_PROVIDERS_DOCKER_EXPOSEDBYDEFAULT=false
+      - TRAEFIK_ENTRYPOINTS_WEB_ADDRESS=:80
+      - TRAEFIK_ENTRYPOINTS_WEBSECURE_ADDRESS=:443
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.dashboard.rule=Host(`traefik.localhost`)"
+      - "traefik.http.routers.dashboard.service=api@internal"
+
+# ============================================
+# Volumes
+# ============================================
+
+volumes:
+  postgres_data:
+  redis_data:
+  mongo_data:
+  mongo_config:
+  portainer_data:
+  models:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ./models
+
+# ============================================
+# Networks
+# ============================================
+
+networks:
+  default:
+    name: powertools
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.25.0.0/16

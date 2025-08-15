@@ -1,0 +1,321 @@
+{
+  "name": "Complete Automation Suite",
+  "workflows": [
+    {
+      "id": "daily-data-pipeline",
+      "name": "Daily Data Pipeline",
+      "description": "Scrape, process, and store data daily",
+      "nodes": [
+        {
+          "name": "Daily Trigger",
+          "type": "n8n-nodes-base.scheduleTrigger",
+          "position": [250, 300],
+          "parameters": {
+            "rule": {
+              "interval": [
+                {
+                  "field": "cronExpression",
+                  "expression": "0 9 * * *"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Scrape Websites",
+          "type": "n8n-nodes-base.httpRequest",
+          "position": [450, 300],
+          "parameters": {
+            "method": "POST",
+            "url": "http://localhost:8000/scrape",
+            "options": {
+              "timeout": 30000
+            },
+            "bodyParametersUi": {
+              "parameter": [
+                {
+                  "name": "urls",
+                  "value": "={{$json.urls}}"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Process with AI",
+          "type": "n8n-nodes-base.httpRequest",
+          "position": [650, 300],
+          "parameters": {
+            "method": "POST",
+            "url": "http://localhost:8080/v1/completions",
+            "bodyParametersUi": {
+              "parameter": [
+                {
+                  "name": "prompt",
+                  "value": "Summarize this content: {{$json.content}}"
+                },
+                {
+                  "name": "max_tokens",
+                  "value": 500
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Save to Obsidian",
+          "type": "n8n-nodes-base.writeBinaryFile",
+          "position": [850, 300],
+          "parameters": {
+            "fileName": "/Users/{{$env.USER}}/Documents/Obsidian/Daily/{{$now.format('YYYY-MM-DD')}}.md",
+            "options": {
+              "append": true
+            }
+          }
+        },
+        {
+          "name": "Send Notification",
+          "type": "n8n-nodes-base.emailSend",
+          "position": [1050, 300],
+          "parameters": {
+            "fromEmail": "automation@local",
+            "toEmail": "user@example.com",
+            "subject": "Daily Pipeline Complete",
+            "text": "Processed {{$items.length}} items"
+          }
+        }
+      ]
+    },
+    {
+      "id": "monitor-changes",
+      "name": "Website Change Monitor",
+      "description": "Monitor websites for changes and alert",
+      "nodes": [
+        {
+          "name": "Check Every Hour",
+          "type": "n8n-nodes-base.scheduleTrigger",
+          "position": [250, 500],
+          "parameters": {
+            "rule": {
+              "interval": [
+                {
+                  "field": "hours",
+                  "hoursInterval": 1
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Previous Hash",
+          "type": "n8n-nodes-base.readBinaryFile",
+          "position": [450, 500],
+          "parameters": {
+            "filePath": "/tmp/website_hashes.json"
+          }
+        },
+        {
+          "name": "Scrape Current",
+          "type": "n8n-nodes-base.httpRequest",
+          "position": [650, 500],
+          "parameters": {
+            "url": "={{$json.url}}",
+            "method": "GET"
+          }
+        },
+        {
+          "name": "Compare Hashes",
+          "type": "n8n-nodes-base.code",
+          "position": [850, 500],
+          "parameters": {
+            "code": "const crypto = require('crypto');\nconst currentHash = crypto.createHash('md5').update($input.item.json.body).digest('hex');\nconst previousHash = $input.item.json.previousHash;\n\nif (currentHash !== previousHash) {\n  return {\n    changed: true,\n    currentHash,\n    previousHash,\n    content: $input.item.json.body\n  };\n}\n\nreturn { changed: false };"
+          }
+        },
+        {
+          "name": "If Changed",
+          "type": "n8n-nodes-base.if",
+          "position": [1050, 500],
+          "parameters": {
+            "conditions": {
+              "boolean": [
+                {
+                  "value1": "={{$json.changed}}",
+                  "value2": true
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Alert User",
+          "type": "n8n-nodes-base.webhook",
+          "position": [1250, 500],
+          "parameters": {
+            "path": "change-detected",
+            "method": "POST"
+          }
+        }
+      ]
+    },
+    {
+      "id": "ai-content-generator",
+      "name": "AI Content Generator",
+      "description": "Generate content using local AI models",
+      "nodes": [
+        {
+          "name": "Webhook Trigger",
+          "type": "n8n-nodes-base.webhook",
+          "position": [250, 700],
+          "parameters": {
+            "path": "generate-content",
+            "method": "POST"
+          }
+        },
+        {
+          "name": "Validate Input",
+          "type": "n8n-nodes-base.code",
+          "position": [450, 700],
+          "parameters": {
+            "code": "if (!$input.item.json.prompt) {\n  throw new Error('Prompt is required');\n}\n\nreturn {\n  prompt: $input.item.json.prompt,\n  type: $input.item.json.type || 'article',\n  length: $input.item.json.length || 500\n};"
+          }
+        },
+        {
+          "name": "Generate with LocalAI",
+          "type": "n8n-nodes-base.httpRequest",
+          "position": [650, 700],
+          "parameters": {
+            "method": "POST",
+            "url": "http://localhost:8080/v1/completions",
+            "bodyParametersUi": {
+              "parameter": [
+                {
+                  "name": "model",
+                  "value": "gpt-3.5-turbo"
+                },
+                {
+                  "name": "prompt",
+                  "value": "={{$json.prompt}}"
+                },
+                {
+                  "name": "max_tokens",
+                  "value": "={{$json.length}}"
+                },
+                {
+                  "name": "temperature",
+                  "value": 0.7
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Format Output",
+          "type": "n8n-nodes-base.code",
+          "position": [850, 700],
+          "parameters": {
+            "code": "const content = $input.item.json.choices[0].text;\nconst timestamp = new Date().toISOString();\n\nreturn {\n  content,\n  timestamp,\n  wordCount: content.split(' ').length,\n  characterCount: content.length\n};"
+          }
+        },
+        {
+          "name": "Save to Database",
+          "type": "n8n-nodes-base.postgres",
+          "position": [1050, 700],
+          "parameters": {
+            "operation": "insert",
+            "table": "generated_content",
+            "columns": "content,timestamp,type",
+            "values": "={{$json.content}},={{$json.timestamp}},={{$json.type}}"
+          }
+        }
+      ]
+    },
+    {
+      "id": "backup-automation",
+      "name": "Automated Backup System",
+      "description": "Backup important data to multiple locations",
+      "nodes": [
+        {
+          "name": "Nightly Backup",
+          "type": "n8n-nodes-base.scheduleTrigger",
+          "position": [250, 900],
+          "parameters": {
+            "rule": {
+              "interval": [
+                {
+                  "field": "cronExpression",
+                  "expression": "0 2 * * *"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "List Files",
+          "type": "n8n-nodes-base.readDirectory",
+          "position": [450, 900],
+          "parameters": {
+            "path": "/Users/{{$env.USER}}/Documents/Important"
+          }
+        },
+        {
+          "name": "Create Archive",
+          "type": "n8n-nodes-base.compression",
+          "position": [650, 900],
+          "parameters": {
+            "operation": "zip",
+            "outputFormat": "file",
+            "fileName": "backup_{{$now.format('YYYY-MM-DD')}}.zip"
+          }
+        },
+        {
+          "name": "Upload to Cloud",
+          "type": "n8n-nodes-base.s3",
+          "position": [850, 900],
+          "parameters": {
+            "operation": "upload",
+            "bucketName": "backups",
+            "fileName": "={{$json.fileName}}"
+          }
+        },
+        {
+          "name": "Log Success",
+          "type": "n8n-nodes-base.writeBinaryFile",
+          "position": [1050, 900],
+          "parameters": {
+            "fileName": "/var/log/backup.log",
+            "options": {
+              "append": true
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "credentials": {
+    "httpBasicAuth": {
+      "username": "admin",
+      "password": "changeme"
+    },
+    "postgres": {
+      "host": "localhost",
+      "port": 5432,
+      "database": "automation",
+      "user": "postgres",
+      "password": "postgres"
+    },
+    "smtp": {
+      "host": "smtp.gmail.com",
+      "port": 587,
+      "user": "automation@example.com",
+      "password": "app_specific_password"
+    }
+  },
+  "settings": {
+    "timezone": "America/New_York",
+    "executionTimeout": 300,
+    "maxExecutionTime": 3600,
+    "saveDataSuccessExecution": "all",
+    "saveDataErrorExecution": "all",
+    "saveManualExecutions": true
+  }
+}
